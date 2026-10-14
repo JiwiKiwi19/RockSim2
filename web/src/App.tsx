@@ -260,7 +260,7 @@ export default function App() {
   if (error) {
     return (
       <div className="fatal" role="alert">
-        <h1>RockSim2</h1>
+        <h1>ROCsim2</h1>
         <p>{error}</p>
         <p>
           This page needs a browser with WebAssembly and module workers: current
