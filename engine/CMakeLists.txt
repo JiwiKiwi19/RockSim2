@@ -18,6 +18,12 @@ target_link_libraries(rocksim_engine PRIVATE rocksim_warnings)
 # differently from separate * and + and would make native and WebAssembly
 # runs diverge. The engine also avoids libm functions that are not correctly
 # rounded (see docs/physics.md).
+#
+# PUBLIC, not PRIVATE: headers such as rng.hpp define inline functions that
+# feed initial conditions. In unoptimized builds the linker keeps one copy of
+# each inline function across all object files, so a consumer (tests, CLI)
+# compiled with contraction could supply the copy the engine calls. That is
+# exactly what broke the golden-hash test in the macOS Debug CI job.
 if(NOT MSVC)
-  target_compile_options(rocksim_engine PRIVATE -ffp-contract=off)
+  target_compile_options(rocksim_engine PUBLIC -ffp-contract=off)
 endif()
