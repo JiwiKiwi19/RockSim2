@@ -1,0 +1,94 @@
+/* ===== Main Window and Central Widget ===== */
+QMainWindow, QWidget#centralwidget {
+    background-color: #2b2b2b; /* Dark gray background */
+    font-family: "Segoe UI", "Arial", sans-serif;
+    font-size: 11pt;
+}
+QMainWindow QLabel {
+    color: white;
+}
+
+/* ===== Top Bar ===== */
+QWidget#topBarWidget {
+    background-color: #353535;  /* Slightly lighter dark gray */
+    border-bottom: 1px solid #444444;
+}
+
+/* ===== Bottom Bar ===== */
+QWidget#bottomBarWidget {
+    background-color: #353535;  /* Slightly lighter dark gray */
+    border-bottom: 1px solid #444444;
+}
+QWidget#bottomBarWidget QLabel {
+    color: white;
+}
+
+/* ===== Buttons ===== */
+QPushButton {
+    background-color: #4a90e2;
+    color: white;
+    border-radius: 4px;
+    padding: 4px 10px;
+}
+
+QPushButton:hover {
+    background-color: #6aaefc;
+}
+
+QPushButton:pressed {
+    background-color: #2a70b5;
+}
+
+QPushButton#pausedButton {
+    background-color: #4CAF50;
+}
+
+
+/* ===== Right Panel ===== */
+QWidget#rightBarWidget {
+    background-color: #3a3a3a;
+    border-left: 1px solid #444444;
+}
+
+/* ===== OpenGL Container ===== */
+QWidget#openGLContainer {
+    background-color: #1e1e1e;  /* Dark background for rendering area */
+}
+
+/* ===== Splitter Styling ===== */
+QSplitter::handle {
+    background-color: #555555;
+}
+
+QSplitter::handle:hover {
+    background-color: #888888;
+}
+
+QSplitter::handle:horizontal {
+    width: 6px;       /* make splitter wider so user can grab */
+}
+
+QSplitter::handle:vertical {
+    height: 6px;
+}
+
+/* ===== Checkboxes ===== */
+
+QCheckBox {
+    spacing: 5px;
+    color: #ffffff;
+}
+
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #777;
+    border-radius: 3px;
+    background-color: #2b2b2b;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #4a90e2;
+    border: 1px solid #4a90e2;
+/*    image: url(:/icons/check_white.svg);*/
+}

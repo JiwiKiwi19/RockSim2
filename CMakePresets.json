@@ -1,0 +1,20 @@
+{
+  "version": 3,
+  "configurePresets": [
+    { "name": "release", "displayName": "Native release", "binaryDir": "build/release",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" } },
+    { "name": "debug", "displayName": "Native debug + sanitizers", "binaryDir": "build/debug",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "ROCKSIM_SANITIZE": "ON" } },
+    { "name": "bench", "displayName": "Benchmarks", "binaryDir": "build/bench",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "ROCKSIM_BUILD_BENCHMARKS": "ON", "ROCKSIM_BUILD_TESTS": "OFF" } }
+  ],
+  "buildPresets": [
+    { "name": "release", "configurePreset": "release" },
+    { "name": "debug", "configurePreset": "debug" },
+    { "name": "bench", "configurePreset": "bench" }
+  ],
+  "testPresets": [
+    { "name": "release", "configurePreset": "release", "output": { "outputOnFailure": true } },
+    { "name": "debug", "configurePreset": "debug", "output": { "outputOnFailure": true } }
+  ]
+}

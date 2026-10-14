@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.16)
+project(probe CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_AUTOMOC ON)
+find_package(Qt6 REQUIRED COMPONENTS Widgets OpenGLWidgets)
+add_executable(physics_probe physics_probe.cpp ${ORIG}/particlesglwidget.cpp ${ORIG}/particlesglwidget.h ${ORIG}/particlekernel.cpp)
+target_include_directories(physics_probe PRIVATE ${ORIG})
+target_link_libraries(physics_probe Qt6::Widgets Qt6::OpenGLWidgets)

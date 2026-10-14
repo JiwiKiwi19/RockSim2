@@ -1,0 +1,14 @@
+# Build outputs
+/build/
+/build-*/
+web/node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/
+# Editors and OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+compile_commands.json
+web/tsconfig.tsbuildinfo

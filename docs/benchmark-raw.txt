@@ -1,0 +1,40 @@
+2026-10-14T11:10:55+09:00
+Running ./build/bench/bench/rocksim_bench
+Run on (2 X 2100 MHz CPU s)
+CPU Caches:
+  L1 Data 48 KiB (x2)
+  L1 Instruction 32 KiB (x2)
+  L2 Unified 2048 KiB (x2)
+  L3 Unified 266240 KiB (x1)
+Load Average: 0.57, 0.33, 0.16
+***WARNING*** Library was built as DEBUG. Timings may be affected.
+----------------------------------------------------------------------------------------
+Benchmark                              Time             CPU   Iterations UserCounters...
+----------------------------------------------------------------------------------------
+BM_BroadPhaseGrid/256               8371 ns         8357 ns        33652 pairs=46
+BM_BroadPhaseGrid/1024             47837 ns        47439 ns         5727 pairs=211
+BM_BroadPhaseGrid/4096            281761 ns       281722 ns          982 pairs=807
+BM_BroadPhaseGrid/16384          1261433 ns      1247990 ns          222 pairs=3.297k
+BM_BroadPhaseGrid/65536          6841899 ns      6773989 ns           42 pairs=12.973k
+BM_BroadPhaseGrid_BigO              6.48 NlgN       6.41 NlgN 
+BM_BroadPhaseGrid_RMS                  6 %             6 %    
+BM_BroadPhaseBruteForce/256        37806 ns        37755 ns         7377
+BM_BroadPhaseBruteForce/1024      726490 ns       725079 ns          495
+BM_BroadPhaseBruteForce/4096     7479039 ns      7476284 ns           31
+BM_BroadPhaseBruteForce/16384  108064443 ns    107860830 ns            3
+BM_BroadPhaseBruteForce_BigO        0.40 N^2        0.40 N^2  
+BM_BroadPhaseBruteForce_RMS            1 %             1 %    
+BM_ParticleBoxStep/300             12348 ns        12296 ns        22968 items_per_second=24.3972M/s
+BM_ParticleBoxStep/1000            55208 ns        55089 ns         4885 items_per_second=18.1524M/s
+BM_ParticleBoxStep/3000           289930 ns       288789 ns          980 items_per_second=10.3882M/s
+BM_IntegratorSoftBody/0             3608 ns         3606 ns        77605 Explicit Euler
+BM_IntegratorSoftBody/1             3642 ns         3637 ns        76852 Symplectic Euler
+BM_IntegratorSoftBody/2            12636 ns        12602 ns        26218 Velocity Verlet
+BM_IntegratorSoftBody/3            18256 ns        18061 ns        18781 Runge-Kutta 4
+BM_NBodyStep/50                     6711 ns         6596 ns        46520
+BM_NBodyStep/64                    10483 ns        10415 ns        28619
+BM_NBodyStep/128                   36498 ns        36414 ns         5534
+BM_NBodyStep/256                  142112 ns       141609 ns         2274
+BM_NBodyStep/400                  368847 ns       363585 ns          756
+BM_NBodyStep_BigO                   2.29 N^2        2.26 N^2  
+BM_NBodyStep_RMS                       3 %             3 %    
