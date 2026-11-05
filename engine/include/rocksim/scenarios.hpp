@@ -36,6 +36,7 @@ struct ScenarioSpec {
     IntegratorKind defaultIntegrator = IntegratorKind::VelocityVerlet;
     double defaultDt = 1e-3;
     std::string validation;  ///< what this scenario can be checked against
+    std::vector<std::string> tryThis;  ///< short experiments for students
 };
 
 using ParamValues = std::map<std::string, double, std::less<>>;
@@ -57,5 +58,9 @@ bool buildScenario(std::string_view id, const ParamValues& values, BuiltScenario
 /// Applies a parameter marked `live` to an existing world. Returns false if the
 /// key is not live for this scenario (the caller should rebuild instead).
 bool applyLiveParam(std::string_view scenarioId, std::string_view key, double value, World& world);
+
+/// Reads the current value of a `live` parameter back from a world (the inverse
+/// of applyLiveParam). Returns false for any other key.
+bool readLiveParam(std::string_view key, const World& world, double& out);
 
 }  // namespace rocksim

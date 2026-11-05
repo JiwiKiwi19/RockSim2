@@ -1,11 +1,15 @@
 // Messages between the UI thread and the engine worker. The worker owns the
-// WebAssembly instance and the time loop; the UI only sends commands and
-// renders the latest frame, so a slow step never blocks input.
+// WebAssembly session and marshals; the UI sends input and draws what comes
+// back. Frames arrive whenever the state changes, series at 10 Hz.
 import type {
-  ConvergenceResult, Diagnostics, DriftResult, IntegratorSpec, Meta, ParamSpec, ScenarioSpec,
+  CommandResult, ConvergenceResult, Diagnostics, DriftResult, IntegratorSpec, Meta, ParamSpec, ScenarioSpec,
+  TimelineState,
 } from './wasm/rocksim.mjs';
 
-export type { ConvergenceResult, Diagnostics, DriftResult, IntegratorSpec, Meta, ParamSpec, ScenarioSpec };
+export type {
+  CommandResult, ConvergenceResult, Diagnostics, DriftResult, IntegratorSpec, Meta, ParamSpec, ScenarioSpec,
+  TimelineState,
+};
 
 export interface LoadRequest {
   scenario: string;
@@ -19,10 +23,18 @@ export type ToWorker =
   | { type: 'play' }
   | { type: 'pause' }
   | { type: 'step'; n: number }
+  | { type: 'stepBack'; n: number }
   | { type: 'speed'; value: number }
-  | { type: 'live'; key: string; value: number }
-  | { type: 'integrator'; id: string }
-  | { type: 'dt'; value: number }
+  | { type: 'seek'; step?: number; time?: number }
+  | { type: 'live'; run: number; key: string; value: number }
+  | { type: 'integrator'; run: number; id: string }
+  | { type: 'dt'; run: number; value: number }
+  | { type: 'grabStart'; run: number; body: number; x: number; y: number }
+  | { type: 'grabMove'; run: number; x: number; y: number }
+  | { type: 'grabEnd'; run: number }
+  | { type: 'setBody'; run: number; body: number; x: number; y: number; vx: number; vy: number }
+  | { type: 'pick'; id: number; run: number; x: number; y: number; tolerance: number }
+  | { type: 'selectBody'; body: number }
   | { type: 'convergence'; damping: number; levels: number }
   | { type: 'drift'; dt: number; eccentricity: number; orbits: number };
 
@@ -37,18 +49,40 @@ export interface Topology {
   springRest: Float64Array;
 }
 
-/** Per-frame data: copies of the state, safe to transfer. */
-export interface Frame {
+/** One run's state: copies, safe to transfer. */
+export interface RunFrame {
   x: Float64Array;
   y: Float64Array;
   vx: Float64Array;
   vy: Float64Array;
   diag: Diagnostics;
   hash: string;
-  running: boolean;
-  stepsPerSecond: number;
-  /** Closed-form oscillator solution at the current time (oscillator scenario only). */
-  reference?: { x: number; numericX: number };
+  /** Current values of the parameters that can change while running. */
+  liveParams: Record<string, number>;
+  /** (x, y) points of every traced body, oldest first; trailCounts[k] points belong to the k-th traced body. */
+  trails: Float64Array;
+  trailCounts: Float64Array;
+  /** Logged user actions as (step, time, kind) triples. */
+  events: Float64Array;
+}
+
+export interface Frame {
+  runs: RunFrame[];
+  timeline: TimelineState;
+  traced: number[];
+}
+
+/** Chart columns of one run. */
+export interface SeriesData {
+  step: Float64Array;
+  t: Float64Array;
+  K: Float64Array;
+  U: Float64Array;
+  E: Float64Array;
+  rel: Float64Array;
+  div: Float64Array;
+  numX: Float64Array;
+  refX: Float64Array;
 }
 
 export type FromWorker =
@@ -57,6 +91,8 @@ export type FromWorker =
   | { type: 'loaded'; ok: true; topology: Topology }
   | { type: 'loaded'; ok: false; errors: string[] }
   | { type: 'frame'; frame: Frame }
-  | { type: 'live'; key: string; ok: boolean; errors: string[] }
+  | { type: 'series'; runs: SeriesData[] }
+  | { type: 'result'; what: 'live' | 'integrator' | 'dt' | 'setBody' | 'grab'; key?: string; result: CommandResult }
+  | { type: 'picked'; id: number; body: number }
   | { type: 'convergence'; results: ConvergenceResult[]; damping: number }
   | { type: 'drift'; results: DriftResult[]; dt: number; eccentricity: number; orbits: number };

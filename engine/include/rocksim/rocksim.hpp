@@ -6,6 +6,7 @@
 #include "rocksim/integrators.hpp"
 #include "rocksim/rng.hpp"
 #include "rocksim/scenarios.hpp"
+#include "rocksim/session.hpp"
 #include "rocksim/simulation.hpp"
 #include "rocksim/vec2.hpp"
 #include "rocksim/world.hpp"

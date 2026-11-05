@@ -1,4 +1,5 @@
-import type { IntegratorSpec, ParamSpec, ScenarioSpec } from './protocol';
+import { useRef, useState } from 'react';
+import type { IntegratorSpec, ParamSpec } from './protocol';
 
 export interface FieldState {
   text: string;
@@ -23,33 +24,38 @@ export function validateDt(text: string): string | null {
   return null;
 }
 
+const SCRUB_PX = 3;
+const show = (v: number) => String(+v.toPrecision(6));
+
 interface Props {
-  scenario: ScenarioSpec;
   integrators: IntegratorSpec[];
+  params: ParamSpec[];
   integrator: string;
   onIntegrator: (id: string) => void;
   dt: FieldState;
   onDt: (text: string) => void;
   fields: Record<string, FieldState>;
   onField: (p: ParamSpec, text: string) => void;
+  /** What the engine is running now: shown for live parameters, which the timeline can change. */
+  live: Record<string, number> | undefined;
   pending: boolean;
   onApply: () => void;
   loadErrors: string[];
   liveErrors: Record<string, string>;
   dimensionless: boolean;
+  /** "A" or "B" when a branch exists: which run these controls edit. */
+  runLabel: string | null;
 }
 
-export function SetupPanel(props: Props) {
-  const { scenario, integrators, integrator, dt, fields, pending, loadErrors, liveErrors, dimensionless } = props;
+export function ParametersPanel(props: Props) {
+  const { integrators, params, integrator, dt, fields, live, pending, loadErrors, liveErrors, dimensionless } = props;
   const anyInvalid = Object.values(fields).some((f) => f.error) || !!dt.error;
-  return (
-    <aside className="panel setup" aria-label="Simulation setup">
-      <section className="block">
-        <h2>{scenario.title}</h2>
-        <p className="lede">{scenario.summary}</p>
-        <p className="units">Units: {scenario.units}</p>
-      </section>
+  const [editing, setEditing] = useState<string | null>(null);
+  const scrub = useRef<{ x: number; v: number; active: boolean } | null>(null);
 
+  return (
+    <div className="params">
+      {props.runLabel && <p className="notice">These controls change run {props.runLabel}.</p>}
       {loadErrors.length > 0 && (
         <div className="notice notice-error" role="alert">
           <strong>These settings can't be loaded.</strong>
@@ -94,11 +100,14 @@ export function SetupPanel(props: Props) {
 
       <section className="block">
         <h3>Parameters</h3>
-        {scenario.params.map((p) => {
+        <p className="field-help">Drag across a number to scrub it.</p>
+        {params.map((p) => {
           const f = fields[p.key] ?? { text: String(p.default), error: null };
           const id = `param-${p.key}`;
           const err = f.error ?? liveErrors[p.key] ?? null;
-          const numeric = Number(f.text);
+          const fromEngine = p.live && live?.[p.key] !== undefined && editing !== p.key;
+          const text = fromEngine ? show(live![p.key]) : f.text;
+          const numeric = Number(text);
           return (
             <div className="field" key={p.key}>
               <label htmlFor={id}>
@@ -119,20 +128,46 @@ export function SetupPanel(props: Props) {
                   id={id}
                   className="num"
                   inputMode="decimal"
-                  value={f.text}
+                  value={text}
                   aria-invalid={!!err}
                   aria-describedby={err ? `${id}-error` : undefined}
+                  onFocus={() => setEditing(p.key)}
+                  onBlur={() => setEditing(null)}
                   onChange={(e) => props.onField(p, e.target.value)}
+                  onPointerDown={(e) => {
+                    if (e.pointerType === 'mouse' && e.button !== 0) return;
+                    scrub.current = { x: e.clientX, v: Number.isFinite(numeric) ? numeric : p.default, active: false };
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                  }}
+                  onPointerMove={(e) => {
+                    const s = scrub.current;
+                    if (!s) return;
+                    const dx = e.clientX - s.x;
+                    if (!s.active && Math.abs(dx) < SCRUB_PX) return;
+                    if (!s.active) { s.active = true; setEditing(p.key); }
+                    const per = (p.max - p.min) / 300;
+                    let v = s.v + dx * per;
+                    if (p.step) v = Math.round(v / p.step) * p.step;
+                    if (p.integer) v = Math.round(v);
+                    v = Math.min(p.max, Math.max(p.min, v));
+                    props.onField(p, show(v));
+                  }}
+                  onPointerUp={(e) => {
+                    const s = scrub.current;
+                    scrub.current = null;
+                    if (s?.active) { setEditing(null); e.currentTarget.blur(); }
+                  }}
+                  onPointerCancel={() => { scrub.current = null; }}
                 />
               </div>
               {err ? <p className="field-error" id={`${id}-error`}>{err}</p> : <p className="field-help">{p.help}</p>}
             </div>
           );
         })}
-        <button className="btn btn-secondary wide" disabled={!pending || anyInvalid} onClick={props.onApply}>
+        <button className="btn wide" disabled={!pending || anyInvalid} onClick={props.onApply}>
           {pending ? 'Apply and restart' : 'Settings applied'}
         </button>
       </section>
-    </aside>
+    </div>
   );
 }

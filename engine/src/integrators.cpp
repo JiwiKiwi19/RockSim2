@@ -20,6 +20,20 @@ bool parseIntegrator(std::string_view id, IntegratorKind& out) {
     return false;
 }
 
+Integrator::Cache Integrator::cache() const {
+    Cache c;
+    c.valid = cacheValid_;
+    if (cacheValid_) { c.ax = ax_; c.ay = ay_; }
+    c.evals = forceEvals_;
+    return c;
+}
+
+void Integrator::restoreCache(const Cache& c) {
+    cacheValid_ = c.valid;
+    if (c.valid) { ax_ = c.ax; ay_ = c.ay; }
+    forceEvals_ = c.evals;
+}
+
 void Integrator::ensureSize(std::size_t n) {
     if (ax_.size() == n) return;
     ax_.assign(n, 0.0); ay_.assign(n, 0.0);
@@ -82,6 +96,7 @@ void Integrator::step(World& world, double dt) {
             eval(world, b.x, b.y, b.vx, b.vy, ax_, ay_);
             bool velocityDependent = false;
             for (const Spring& s : world.springs) velocityDependent |= (s.damping != 0.0);
+            velocityDependent |= world.grab.has_value();
             if (velocityDependent) {
                 // Dashpot forces need v_{n+1}, which is what we are computing.
                 // Using v_{n+1/2} instead leaves an O(dt^2) velocity error per

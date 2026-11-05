@@ -1,94 +1,146 @@
 /// <reference lib="webworker" />
-// Engine worker: owns the WebAssembly simulation and its fixed-step loop.
-//
-// Every ~16 ms it asks the engine to advance by (elapsed wall time x speed)
-// simulated seconds. The engine takes whole steps of size dt (accumulator),
-// so the step size never depends on the frame rate. A per-tick step budget,
-// adapted from measured step cost, keeps each tick under ~10 ms; if the
-// engine cannot keep up, simulated time runs slower than requested instead of
-// queueing an ever-growing backlog (reported as droppedTime).
+// Engine worker: owns the WebAssembly session and marshals messages.
+// Every ~16 ms it passes the wall time to Session.tick(), which owns the time
+// loop. Seeks, grab moves, body drags and live edits are coalesced so only the
+// newest of each is applied per tick; everything else is applied on arrival.
 import createRockSim from './wasm/rocksim.mjs';
-import type { RockSimModule, WasmSimulation } from './wasm/rocksim.mjs';
-import type { Frame, FromWorker, LoadRequest, ToWorker } from './protocol';
+import type { CommandResult, RockSimModule, WasmSession } from './wasm/rocksim.mjs';
+import type { Frame, FromWorker, RunFrame, SeriesData, ToWorker } from './protocol';
 
 declare const self: DedicatedWorkerGlobalScope;
 
 let M: RockSimModule | null = null;
-let sim: WasmSimulation | null = null;
-let current: LoadRequest | null = null;
-let running = false;
-let speed = 1;
+let session: WasmSession | null = null;
 let lastTick = 0;
-let msPerStep = 0.05; // running estimate, refined after each tick
-let stepsThisSecond = 0;
-let stepsPerSecond = 0;
-let secondStart = 0;
+let lastComputeMs = 0;
+let frameDirty = false;
+let seriesDirty = false;
 const queue: ToWorker[] = [];
+
+type Pending = {
+  seek?: { step?: number; time?: number };
+  grabMove?: { run: number; x: number; y: number };
+  body: Map<string, Extract<ToWorker, { type: 'setBody' }>>;
+  live: Map<string, Extract<ToWorker, { type: 'live' }>>;
+};
+const pending: Pending = { body: new Map(), live: new Map() };
 
 const post = (msg: FromWorker, transfer: Transferable[] = []) => self.postMessage(msg, transfer);
 
-function copy<T extends Float64Array | Uint8Array | Uint32Array>(view: T): T {
-  // Views alias WebAssembly memory, which can be replaced when it grows; copy now.
-  return view.slice() as T;
-}
+// Views alias WebAssembly memory, which can be replaced when it grows; copy now.
+const copy = <T extends Float64Array | Uint8Array | Uint32Array>(view: T): T => view.slice() as T;
 
 function sendFrame() {
-  if (!sim || !M || !current) return;
-  const diag = sim.diagnostics();
-  const frame: Frame = {
-    x: copy(sim.x()), y: copy(sim.y()), vx: copy(sim.vx()), vy: copy(sim.vy()),
-    diag, hash: sim.hash(), running: running && diag.status === 'ok', stepsPerSecond,
-  };
-  if (current.scenario === 'spring-oscillator') {
-    const p = current.params;
-    const mass = p.mass ?? 1, k = p.stiffness ?? 10, c = p.damping ?? 0, x0 = p.x0 ?? 0.5;
-    frame.reference = { x: M.oscillatorExact(mass, k, c, x0, 0, diag.time).x, numericX: frame.x[1] };
+  if (!session) return;
+  const runs: RunFrame[] = [];
+  const transfer: Transferable[] = [];
+  for (let r = 0; r < session.runCount(); r++) {
+    const run: RunFrame = {
+      x: copy(session.x(r)), y: copy(session.y(r)), vx: copy(session.vx(r)), vy: copy(session.vy(r)),
+      diag: session.diagnostics(r), hash: session.hash(r), liveParams: session.liveParams(r),
+      trails: copy(session.trailPoints(r)), trailCounts: copy(session.trailCounts()), events: copy(session.events(r)),
+    };
+    transfer.push(run.x.buffer, run.y.buffer, run.vx.buffer, run.vy.buffer, run.trails.buffer, run.trailCounts.buffer, run.events.buffer);
+    runs.push(run);
   }
-  post({ type: 'frame', frame }, [frame.x.buffer, frame.y.buffer, frame.vx.buffer, frame.vy.buffer]);
+  const frame: Frame = { runs, timeline: session.timeline(), traced: session.traced() };
+  post({ type: 'frame', frame }, transfer);
+  frameDirty = false;
 }
 
-function load(req: LoadRequest) {
-  if (!M) return;
-  const next = new M.Simulation();
-  const res = next.load(req.scenario, req.params, req.integrator, req.dt);
+function sendSeries() {
+  if (!session) return;
+  const runs: SeriesData[] = [];
+  const transfer: Transferable[] = [];
+  for (let r = 0; r < session.runCount(); r++) {
+    const v = session.series(r);
+    const s: SeriesData = {
+      step: copy(v.step), t: copy(v.t), K: copy(v.K), U: copy(v.U), E: copy(v.E),
+      rel: copy(v.rel), div: copy(v.div), numX: copy(v.numX), refX: copy(v.refX),
+    };
+    transfer.push(s.step.buffer, s.t.buffer, s.K.buffer, s.U.buffer, s.E.buffer, s.rel.buffer, s.div.buffer, s.numX.buffer, s.refX.buffer);
+    runs.push(s);
+  }
+  post({ type: 'series', runs }, transfer);
+  seriesDirty = false;
+}
+
+function touch() {
+  frameDirty = true;
+  seriesDirty = true;
+}
+
+function load(req: Extract<ToWorker, { type: 'load' }>['req']) {
+  if (!M || !session) return;
+  const res = session.load(req.scenario, req.params, req.integrator, req.dt);
   if (!res.ok) {
-    next.delete();
     post({ type: 'loaded', ok: false, errors: res.errors });
     return;
   }
-  sim?.delete();
-  sim = next;
-  current = { ...req, params: { ...req.params } };
-  running = false;
-  msPerStep = 0.05;
+  pending.seek = undefined;
+  pending.grabMove = undefined;
+  pending.body.clear();
+  pending.live.clear();
   post({
     type: 'loaded', ok: true,
     topology: {
-      meta: sim.meta(), count: sim.count(), radius: copy(sim.radius()), mass: copy(sim.mass()),
-      fixed: copy(sim.fixed()), springs: copy(sim.springs()), springRest: copy(sim.springRest()),
+      meta: session.meta(), count: session.count(), radius: copy(session.radius()), mass: copy(session.mass()),
+      fixed: copy(session.fixed()), springs: copy(session.springs()), springRest: copy(session.springRest()),
     },
   });
+  touch();
   sendFrame();
+  sendSeries();
+}
+
+function applySeek(s: { step?: number; time?: number }) {
+  if (!session) return;
+  if (s.time !== undefined) session.seekTime(s.time);
+  else if (s.step !== undefined) session.seek(s.step);
+}
+
+/** Applies the coalesced input in the order the user produced it. */
+function flush() {
+  if (!session) return;
+  if (pending.seek) { applySeek(pending.seek); pending.seek = undefined; touch(); }
+  for (const m of pending.live.values()) report('live', session.setParam(m.run, m.key, m.value), m.key);
+  pending.live.clear();
+  for (const m of pending.body.values()) report('setBody', session.setBody(m.run, m.body, m.x, m.y, m.vx, m.vy));
+  pending.body.clear();
+  if (pending.grabMove) {
+    const g = pending.grabMove;
+    session.grabMove(g.run, g.x, g.y);
+    pending.grabMove = undefined;
+    frameDirty = true;
+  }
+}
+
+function report(what: 'live' | 'integrator' | 'dt' | 'setBody' | 'grab', result: CommandResult, key?: string) {
+  post({ type: 'result', what, key, result });
+  touch();
 }
 
 function handle(msg: ToWorker) {
-  if (!M) { queue.push(msg); return; }
+  if (!M || !session) { queue.push(msg); return; }
+  // Order matters for a drag: queued moves land before the command that follows them.
+  if (msg.type !== 'grabMove' && msg.type !== 'seek' && msg.type !== 'setBody' && msg.type !== 'live' && msg.type !== 'pick') flush();
   switch (msg.type) {
     case 'load': load(msg.req); break;
-    case 'play': running = true; lastTick = performance.now(); break;
-    case 'pause': running = false; sendFrame(); break;
-    case 'step': running = false; sim?.stepN(Math.max(1, Math.min(10000, Math.floor(msg.n)))); sendFrame(); break;
-    case 'speed': speed = Math.min(16, Math.max(1 / 64, msg.value)); break;
-    case 'live': {
-      if (!sim) break;
-      const r = sim.setLiveParam(msg.key, msg.value);
-      if (r.ok && current) current.params[msg.key] = msg.value;
-      post({ type: 'live', key: msg.key, ok: r.ok, errors: r.errors });
-      sendFrame();
-      break;
-    }
-    case 'integrator': if (sim?.setIntegrator(msg.id) && current) current.integrator = msg.id; sendFrame(); break;
-    case 'dt': if (sim?.setDt(msg.value) && current) current.dt = msg.value; break;
+    case 'play': session.play(); lastTick = performance.now(); touch(); break;
+    case 'pause': session.pause(); touch(); break;
+    case 'step': session.step(Math.max(1, Math.min(10000, Math.floor(msg.n)))); touch(); break;
+    case 'stepBack': session.stepBack(Math.max(1, Math.floor(msg.n))); touch(); break;
+    case 'speed': session.setSpeed(msg.value); break;
+    case 'seek': pending.seek = msg; break;
+    case 'live': pending.live.set(`${msg.run}:${msg.key}`, msg); break;
+    case 'setBody': pending.body.set(`${msg.run}:${msg.body}`, msg); break;
+    case 'grabMove': pending.grabMove = msg; break;
+    case 'integrator': report('integrator', session.setIntegrator(msg.run, msg.id)); break;
+    case 'dt': report('dt', session.setDt(msg.run, msg.value)); break;
+    case 'grabStart': report('grab', session.grabStart(msg.run, msg.body, msg.x, msg.y)); break;
+    case 'grabEnd': session.grabEnd(msg.run); touch(); break;
+    case 'selectBody': session.selectBody(msg.body); touch(); break;
+    case 'pick': post({ type: 'picked', id: msg.id, body: session.pick(msg.run, msg.x, msg.y, msg.tolerance) }); break;
     case 'convergence': {
       const results = M.integrators().map((i) => M!.convergence(i.id, msg.damping, msg.levels));
       post({ type: 'convergence', results, damping: msg.damping });
@@ -103,24 +155,16 @@ function handle(msg: ToWorker) {
 }
 
 function tick() {
+  if (!session) return;
   const now = performance.now();
-  if (now - secondStart >= 1000) {
-    stepsPerSecond = (stepsThisSecond * 1000) / (now - secondStart);
-    stepsThisSecond = 0;
-    secondStart = now;
-  }
-  if (!running || !sim) return;
-  const wall = Math.min(0.1, (now - lastTick) / 1000); // a background tab must not request minutes at once
+  const wall = (now - lastTick) / 1000;
   lastTick = now;
-  const budgetMs = 10;
-  const maxSteps = Math.max(1, Math.floor(budgetMs / Math.max(msPerStep, 1e-4)));
+  flush();
   const t0 = performance.now();
-  const taken = sim.advance(wall * speed, maxSteps);
-  const elapsed = performance.now() - t0;
-  if (taken > 0) msPerStep = 0.8 * msPerStep + 0.2 * (elapsed / taken);
-  stepsThisSecond += taken;
-  sendFrame();
-  if (sim.diagnostics().status !== 'ok') running = false;
+  const taken = session.tick(wall, lastComputeMs);
+  lastComputeMs = performance.now() - t0;
+  if (taken > 0) touch();
+  if (frameDirty) sendFrame();
 }
 
 self.onmessage = (e: MessageEvent<ToWorker>) => handle(e.data);
@@ -128,9 +172,11 @@ self.onmessage = (e: MessageEvent<ToWorker>) => handle(e.data);
 createRockSim()
   .then((mod) => {
     M = mod;
+    session = new M.Session();
     post({ type: 'ready', catalog: M.catalog(), integrators: M.integrators() });
-    secondStart = performance.now();
+    lastTick = performance.now();
     setInterval(tick, 16);
+    setInterval(() => { if (seriesDirty) sendSeries(); }, 100);
     for (const m of queue.splice(0)) handle(m);
   })
   .catch((err: unknown) => post({ type: 'fatal', message: `The engine failed to start: ${String(err)}` }));

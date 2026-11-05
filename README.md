@@ -2,7 +2,7 @@
 
 A 2D physics engine written in C++20 and compiled to WebAssembly. It runs particle collisions, springs and Newtonian gravity in the browser, and checks its own numerical behaviour against closed-form solutions and conservation laws while it runs.
 
-![The particle box: 300 discs under gravity with restitution 0.9, rendered on graph paper with live energy and momentum readouts.](docs/images/particle-box.png)
+![The particle box: 300 discs under gravity with restitution 0.9, in the retro workstation interface: draggable windows, a dot grid at true scale, a timeline tape, and live readouts.](docs/images/particle-box.png)
 
 RockSim began as **ROCsim**, a CS3307 group project at Western University (Fall 2025). This repository is a rebuild of that project; [what came from the original and what changed](#project-history-and-credits) is set out below.
 
@@ -18,6 +18,8 @@ RockSim began as **ROCsim**, a CS3307 group project at Western University (Fall 
 | Orbital disk | O(N²) direct-sum gravity with Plummer softening | Qualitative; momentum conserved to round-off |
 
 Every scenario runs under any of four integrators: **explicit Euler, symplectic Euler, velocity Verlet and RK4**. You can switch integrator and time step while it runs and watch what happens to the error.
+
+**Hands on, and in time.** Drag a body to grab it (a critically damped spring pulls it; let go to fling it) or, while paused, to place it. Drag the tape or click a chart to rewind to any recorded step. Change something in the past and a second run, B, branches off while A keeps its future; the charts overlay the two and show how far apart they drift. The engine records keyframes and a log of your actions, so replay is bit-exact. Press Help in the menu bar for the full list of controls.
 
 ![The Verify view: a log–log convergence plot where measured errors lie on the theoretical slopes, and a long-run energy-error comparison.](docs/images/verify.png)
 
@@ -38,7 +40,7 @@ All numbers below come from the commands shown and are reproduced by the test su
 
 **Reproducibility:** after 3,000 steps, all six scenarios give bit-identical states (same 64-bit hash) on x86-64 Linux (GCC 13), ARM64 Linux (GCC 11) and in WebAssembly (Emscripten 3.1.6). All six were checked in Node; a browser test checks one in Chromium. [Why that holds, and what it took](docs/physics.md#reproducibility).
 
-**Tests:** 58 GoogleTest cases (clean under AddressSanitizer and UndefinedBehaviorSanitizer) and 5 Playwright browser tests. The browser tests run the real WebAssembly engine.
+**Tests:** 84 GoogleTest cases (clean under UndefinedBehaviorSanitizer; the AddressSanitizer preset is run in CI) and 10 Playwright browser tests. The browser tests run the real WebAssembly engine.
 
 ## Quick start
 
@@ -48,7 +50,7 @@ Requirements: CMake ≥ 3.20, a C++20 compiler, Node.js ≥ 18 and, for the web 
 # Native engine, tests and CLI
 cmake --preset release
 cmake --build --preset release
-ctest --preset release                      # 58 tests
+ctest --preset release                      # 84 tests
 
 ./build/release/cli/rocksim-cli list        # scenarios and their parameters
 ./build/release/cli/rocksim-cli convergence # integrator orders
