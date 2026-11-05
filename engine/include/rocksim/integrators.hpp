@@ -55,6 +55,16 @@ public:
     /// Force evaluations performed since construction (for benchmarks / tests).
     [[nodiscard]] long long forceEvaluations() const { return forceEvals_; }
 
+    /// What carries over between steps: the Verlet acceleration cache and the
+    /// evaluation counter. Everything else is scratch rewritten every step.
+    struct Cache {
+        bool valid = false;
+        std::vector<double> ax, ay;
+        long long evals = 0;
+    };
+    [[nodiscard]] Cache cache() const;
+    void restoreCache(const Cache& c);
+
 private:
     void ensureSize(std::size_t n);
     void eval(const World& w, const std::vector<double>& x, const std::vector<double>& y,

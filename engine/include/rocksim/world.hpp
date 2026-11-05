@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -64,10 +65,21 @@ struct WorldParams {
     double restitution = 1.0;  ///< body-body coefficient of restitution e in [0, 1]
 };
 
+/// A user's hand holding one body: a critically damped pull toward `target`,
+///   a += omega^2 (target - x) - 2 omega v,
+/// added inside computeAccelerations so multi-stage integrators see it at
+/// their trial states. Arithmetic and sqrt only, like every other force.
+struct Grab {
+    std::uint32_t body = 0;
+    Vec2 target{};
+    double omega = 0.0;  ///< [1/s]
+};
+
 struct World {
     Bodies bodies;
     std::vector<Spring> springs;
     WorldParams params;
+    std::optional<Grab> grab;
 };
 
 /// Conserved / monitored quantities. Fixed bodies are excluded from kinetic

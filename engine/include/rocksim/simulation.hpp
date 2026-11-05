@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -21,6 +22,25 @@ struct Diagnostics {
     /// meaningful when E0 is (close to) zero.
     double relativeEnergyError = 0.0;
     ContactStats lastContacts;
+};
+
+/// Everything about a run that can change after load: restoring it and
+/// stepping again reproduces the original continuation bit for bit. Masses,
+/// radii and topology never change within a loaded run, so they are not stored.
+struct SimSnapshot {
+    std::vector<double> x, y, vx, vy;
+    WorldParams params;
+    std::optional<Grab> grab;
+    IntegratorKind kind = IntegratorKind::VelocityVerlet;
+    Integrator::Cache cache;
+    double dt = 0.0, time = 0.0, accumulator = 0.0, droppedTime = 0.0;
+    std::uint64_t steps = 0;
+    ContactStats lastContacts;
+    Invariants initial;
+    SimStatus status = SimStatus::Ok;
+    std::string statusMessage;
+
+    [[nodiscard]] std::size_t bytes() const;
 };
 
 /// Owns a World and advances it with a fixed time step.
@@ -70,6 +90,26 @@ public:
     [[nodiscard]] IntegratorKind integratorKind() const { return integrator_.kind(); }
     void setIntegrator(IntegratorKind k) { integrator_.setKind(k); }
 
+    /// Resets the energy baseline to the current state (see paramsChanged()).
+    void rebaseline() { initial_ = computeInvariants(world_); }
+
+    /// Moves a free body and sets its velocity. Rejects (returns false) a bad
+    /// index, a fixed body, non-finite values or an unstable run. With walls
+    /// on, the position is clamped inside the box. Rebaselines the energy.
+    bool setBodyState(std::uint32_t body, Vec2 position, Vec2 velocity);
+
+    /// Hold a free body with the grab force (see Grab). The target is clamped
+    /// inside the box when walls are on. The grab adds energy, so the
+    /// energy-growth stability check is suspended while it is held and the
+    /// baseline is reset on release.
+    bool setGrab(std::uint32_t body, Vec2 target);
+    bool moveGrab(Vec2 target);
+    void releaseGrab();
+    [[nodiscard]] bool grabbed() const { return world_.grab.has_value(); }
+
+    [[nodiscard]] SimSnapshot capture() const;
+    void restore(const SimSnapshot& snap);
+
     [[nodiscard]] double time() const { return time_; }
     [[nodiscard]] std::uint64_t steps() const { return steps_; }
     [[nodiscard]] double droppedTime() const { return droppedTime_; }
@@ -77,6 +117,8 @@ public:
 
 private:
     void checkHealth();
+    [[nodiscard]] bool inputsOk(std::uint32_t body, Vec2 p) const;
+    [[nodiscard]] Vec2 clampInside(std::uint32_t body, Vec2 p) const;
 
     World world_;
     WorldParams lastGoodParams_;

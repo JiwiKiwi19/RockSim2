@@ -78,6 +78,13 @@ void computeAccelerations(const World& world,
             }
         }
     }
+
+    if (world.grab && world.grab->body < n && !b.fixed[world.grab->body]) {
+        const std::size_t g = world.grab->body;
+        const double w = world.grab->omega;
+        ax[g] += w * w * (world.grab->target.x - x[g]) - 2.0 * w * vx[g];
+        ay[g] += w * w * (world.grab->target.y - y[g]) - 2.0 * w * vy[g];
+    }
 }
 
 Invariants computeInvariants(const World& world) {

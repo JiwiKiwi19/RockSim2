@@ -15,6 +15,7 @@ add_executable(rocksim_tests
   test_contacts.cpp
   test_integrators.cpp
   test_nbody.cpp
+  test_session.cpp
   test_simulation.cpp
 )
 target_link_libraries(rocksim_tests PRIVATE RockSim::engine rocksim_warnings GTest::gtest_main)

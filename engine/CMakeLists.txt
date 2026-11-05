@@ -5,6 +5,7 @@ add_library(rocksim_engine STATIC
   src/contacts.cpp
   src/integrators.cpp
   src/simulation.cpp
+  src/session.cpp
   src/scenarios.cpp
   src/analysis.cpp
 )

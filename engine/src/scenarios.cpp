@@ -36,7 +36,8 @@ std::vector<ScenarioSpec> makeCatalog() {
                   P("seed", "Seed", "", 1, 999999, 42, 1, true, false, "Random seed for initial conditions")},
                  IntegratorKind::VelocityVerlet, 1e-3,
                  "Momentum is conserved exactly by every disc-disc impulse; with e = 1 and no gravity, "
-                 "kinetic energy is conserved. Wall bounces change momentum by design."});
+                 "kinetic energy is conserved. Wall bounces change momentum by design.",
+                 {"Grab a heavy disc and fling it into the crowd. Watch the total momentum readout.", "Set restitution to 0.5 and watch kinetic energy fall with each collision.", "Raise gravity from 0 and see how the discs settle."}});
 
     c.push_back({"spring-oscillator", "Damped oscillator",
                  "A mass on a spring attached to a fixed anchor. The exact solution is drawn alongside "
@@ -47,7 +48,8 @@ std::vector<ScenarioSpec> makeCatalog() {
                   P("damping", "Damping c", "N·s/m", 0, 20, 0, 0.05, false, false, "Dashpot coefficient"),
                   P("x0", "Initial displacement", "m", -0.9, 0.9, 0.5, 0.01, false, false, "Starting offset from equilibrium")},
                  IntegratorKind::VelocityVerlet, 1e-2,
-                 "Compared against the closed-form solution of m x'' + c x' + k x = 0 at every step."});
+                 "Compared against the closed-form solution of m x'' + c x' + k x = 0 at every step.",
+                 {"Switch to Explicit Euler and watch the numerical body drift away from the red exact ring as its amplitude grows.", "Drag the body to a new position while paused, then press Run.", "Run it, then rewind 2 s and halve dt. What changes?"}});
 
     c.push_back({"soft-body", "Soft body",
                  "A lattice of point masses joined by structural and shear springs, dropped onto the "
@@ -64,7 +66,8 @@ std::vector<ScenarioSpec> makeCatalog() {
                   P("dropHeight", "Drop height", "m", 0, 1.2, 0.6, 0.05, false, false, "Gap between the body and the floor"),
                   P("spin", "Initial spin", "rad/s", -6, 6, 1.5, 0.1, false, false, "Initial angular velocity")},
                  IntegratorKind::VelocityVerlet, 1e-3,
-                 "Qualitative. Energy can only decrease (dampers, e < 1); a rise means instability."});
+                 "Qualitative. Energy can only decrease (dampers, e < 1); a rise means instability.",
+                 {"Pick Explicit Euler and set dt to 0.004. Run until it blows up, then rewind 1 s and halve dt.", "Grab a corner node and shake the body.", "Set damping to 0 and see how long the bounce lasts."}});
 
     c.push_back({"kepler", "Two-body orbit",
                  "Two bodies under Newtonian gravity in their centre-of-mass frame. The period is "
@@ -73,7 +76,8 @@ std::vector<ScenarioSpec> makeCatalog() {
                  {P("eccentricity", "Eccentricity", "", 0, 0.95, 0.6, 0.01, false, false, "Orbit eccentricity"),
                   P("massRatio", "Mass ratio m₂/m₁", "", 0.001, 1, 0.2, 0.001, false, false, "Secondary over primary mass")},
                  IntegratorKind::VelocityVerlet, 1e-3,
-                 "Period T = 2π√(a³/GM); energy, momentum and angular momentum are conserved."});
+                 "Period T = 2π√(a³/GM); energy, momentum and angular momentum are conserved.",
+                 {"Switch to Explicit Euler: the orbit grows and the energy drifts.", "Compare Verlet and RK4 at dt = 0.01 over many orbits in Verify.", "Raise eccentricity to 0.9 and watch the speed change near the close approach."}});
 
     c.push_back({"figure-eight", "Figure-eight three-body",
                  "Three equal masses chasing each other around a figure eight (Chenciner & Montgomery, "
@@ -82,7 +86,8 @@ std::vector<ScenarioSpec> makeCatalog() {
                  {P("perturbation", "Perturbation", "", -0.05, 0.05, 0, 0.001, false, false,
                     "Offset added to body 1's x position")},
                  IntegratorKind::RK4, 1e-3,
-                 "Returns to its initial state after T = 6.32591398; total momentum is exactly zero."});
+                 "Returns to its initial state after T = 6.32591398; total momentum is exactly zero.",
+                 {"Set a perturbation of 0.01 and watch the orbit lose its symmetry.", "Pause, drag one body slightly, then Run to see the chaos.", "Rewind to t = 3 and run again to confirm the same path."}});
 
     c.push_back({"orbital-disk", "Orbital disk",
                  "Many light bodies on near-circular orbits around a heavy central body, with softened "
@@ -93,7 +98,8 @@ std::vector<ScenarioSpec> makeCatalog() {
                   P("softening", "Softening ε", "", 0.001, 0.2, 0.02, 0.001, false, true, "Plummer softening length"),
                   P("seed", "Seed", "", 1, 999999, 7, 1, true, false, "Random seed")},
                  IntegratorKind::VelocityVerlet, 2e-3,
-                 "Qualitative. Total momentum is conserved to round-off; energy error is reported."});
+                 "Qualitative. Total momentum is conserved to round-off; energy error is reported.",
+                 {"Set the disk mass to 0.5 and watch the disk clump.", "Lower the softening and watch the energy error during close passes.", "Select a body to trace its orbit."}});
     return c;
 }
 
@@ -358,6 +364,15 @@ bool applyLiveParam(std::string_view scenarioId, std::string_view key, double va
     else if (key == "restitution") w.params.restitution = value;
     else if (key == "wallRestitution") w.params.wallRestitution = value;
     else if (key == "softening") w.params.softening = value;
+    else return false;
+    return true;
+}
+
+bool readLiveParam(std::string_view key, const World& w, double& out) {
+    if (key == "gravity") out = -w.params.gravity.y;
+    else if (key == "restitution") out = w.params.restitution;
+    else if (key == "wallRestitution") out = w.params.wallRestitution;
+    else if (key == "softening") out = w.params.softening;
     else return false;
     return true;
 }
